@@ -15,6 +15,11 @@ class ConformanceTest extends TestCase
     private function loadFixture(string $name): array
     {
         $path = dirname(__DIR__, 3) . "/backend/specs/conformance/{$name}";
+
+        if (!file_exists($path)) {
+            $this->markTestSkipped("Conformance fixture not available: {$name} (only runs inside monorepo)");
+        }
+
         $raw = file_get_contents($path);
         $this->assertNotFalse($raw, "failed to read fixture: {$path}");
 
