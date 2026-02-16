@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## 1.0.0 (2026-02-16)
+
+
+### Bug Fixes
+
+* update tests ([09a3a84](https://github.com/apinator-io/sdk-php/commit/09a3a847dab97b8b941597b28974c6668edc8213))
+* update tests ([999fa50](https://github.com/apinator-io/sdk-php/commit/999fa509deb2246f805c35267bc12bff7454f044))
+
+
+### Miscellaneous Chores
+
+* init ([078c383](https://github.com/apinator-io/sdk-php/commit/078c383114f6de80be119ac4dca51b99c2eec7e8))
+
 ## [1.0.0] - 2026-02-15
 
 ### Added
