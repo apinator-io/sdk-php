@@ -2,7 +2,7 @@
 
 [![Packagist Version](https://img.shields.io/packagist/v/apinator/apinator-php.svg)](https://packagist.org/packages/apinator/apinator-php)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![CI](https://github.com/apinator/sdk-php/actions/workflows/test.yml/badge.svg)](https://github.com/apinator-io/sdk-php/actions/workflows/test.yml)
+[![CI](https://github.com/apinator-io/sdk-php/actions/workflows/test.yml/badge.svg)](https://github.com/apinator-io/sdk-php/actions/workflows/test.yml)
 
 PHP server SDK for [Apinator](https://apinator.io) — trigger real-time events, authenticate channels, and verify webhooks.
 
