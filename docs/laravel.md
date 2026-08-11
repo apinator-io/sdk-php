@@ -149,9 +149,9 @@ In your Blade template or Vue/React app:
 
 ```html
 <script type="module">
-  import { RealtimeClient } from '@apinator/sdk';
+  import { Apinator } from '@apinator/client';
 
-  const client = new RealtimeClient({
+  const client = new Apinator({
     appKey: '{{ config("services.apinator.key") }}',
     cluster: 'eu', // or 'us'
     authEndpoint: '/api/realtime/auth',
