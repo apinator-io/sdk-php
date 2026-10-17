@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.0](https://github.com/apinator-io/sdk-php/compare/v1.0.2...v1.1.0) (2026-10-17)
+
+
+### Features
+
+* verify webhooks with the endpoint's webhook secret ([#5](https://github.com/apinator-io/sdk-php/issues/5)) ([014249d](https://github.com/apinator-io/sdk-php/commit/014249de88e57a9eef4e0f8c60a634bd2e08ddf6))
+
 ## [1.0.2](https://github.com/apinator-io/sdk-php/compare/v1.0.1...v1.0.2) (2026-02-16)
 
 
