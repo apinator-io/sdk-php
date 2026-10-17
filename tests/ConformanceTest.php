@@ -98,9 +98,52 @@ class ConformanceTest extends TestCase
         }
     }
 
+    /**
+     * The webhook fixture is shared from the Node SDK (sdks/node/test/fixtures),
+     * which also carries the verification cases.
+     */
+    private function loadWebhookFixture(): array
+    {
+        $path = dirname(__DIR__, 2) . '/node/test/fixtures/webhook-signature.v1.json';
+
+        if (!file_exists($path)) {
+            $this->markTestSkipped('Shared webhook fixture not available (only runs inside monorepo)');
+        }
+
+        $decoded = json_decode((string)file_get_contents($path), true);
+        $this->assertIsArray($decoded, "failed to parse fixture: {$path}");
+        return $decoded;
+    }
+
+    public function testWebhookVerifyFixtureCases(): void
+    {
+        $fixture = $this->loadWebhookFixture();
+        $this->assertNotEmpty($fixture['verify_cases'] ?? []);
+
+        foreach ($fixture['verify_cases'] as $case) {
+            $timestamp = (string)(time() + $case['timestamp_offset']);
+            $signature = Webhook::sign($case['signing_secret'] ?? $case['secret'], $timestamp, $case['body']);
+            $fill = fn (string $v): string => str_replace(['{timestamp}', '{signature}'], [$timestamp, $signature], $v);
+
+            $headers = [];
+            foreach ($case['headers'] as $name => $value) {
+                $headers[$name] = is_array($value) ? array_map($fill, $value) : $fill($value);
+            }
+
+            // Webhook::verify signals missing headers / stale timestamps by throwing.
+            try {
+                $valid = Webhook::verify($case['secret'], $headers, $case['body'], $case['max_age']);
+            } catch (ValidationException) {
+                $valid = false;
+            }
+
+            $this->assertSame($case['expected_valid'], $valid, "failed webhook verify case {$case['name']}");
+        }
+    }
+
     public function testWebhookFixtureVectors(): void
     {
-        $fixture = $this->loadFixture('webhook-signature.v1.json');
+        $fixture = $this->loadWebhookFixture();
         foreach ($fixture['cases'] as $case) {
             $signature = Webhook::sign($case['secret'], $case['timestamp'], $case['body']);
             $this->assertSame($case['expected_signature'], $signature, "failed webhook case {$case['name']}");

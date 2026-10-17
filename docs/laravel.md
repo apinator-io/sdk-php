@@ -17,6 +17,8 @@ APINATOR_APP_ID=your-app-id
 APINATOR_KEY=your-app-key
 APINATOR_SECRET=your-app-secret
 APINATOR_CLUSTER=eu
+# Signing secret of your webhook endpoint (console → webhooks), not the API secret
+APINATOR_WEBHOOK_SECRET=whsec_...
 ```
 
 Register the client as a singleton in `AppServiceProvider`:
@@ -47,6 +49,7 @@ Add the config in `config/services.php`:
     'key' => env('APINATOR_KEY'),
     'secret' => env('APINATOR_SECRET'),
     'cluster' => env('APINATOR_CLUSTER', 'eu'),
+    'webhook_secret' => env('APINATOR_WEBHOOK_SECRET'),
 ],
 ```
 
@@ -126,16 +129,29 @@ class MessageController extends Controller
 
 Route::post('/webhooks/apinator', function (Request $request, Apinator $client) {
     try {
-        $client->verifyWebhook(
-            $request->headers->all(),
+        // false = signature mismatch; exception = missing header or stale timestamp
+        $valid = $client->verifyWebhook(
+            config('services.apinator.webhook_secret'), // whsec_..., from APINATOR_WEBHOOK_SECRET
+            $request->headers->all(),                   // array values are fine
             $request->getContent(),
             maxAge: 300,
         );
     } catch (\Apinator\Errors\ValidationException $e) {
+        $valid = false;
+    }
+
+    if (!$valid) {
         return response('Invalid signature', 401);
     }
 
+    // ['id' => '...', 'event' => 'member_added', 'app_id' => '...',
+    //  'channel' => 'presence-room', 'user_id' => '42', 'time_ms' => 1760000000000]
     $payload = $request->json()->all();
+
+    // Deliveries are at-least-once: dedupe on the event id.
+    if (!\Illuminate\Support\Facades\Cache::add('apinator-webhook:' . $payload['id'], true, now()->addDay())) {
+        return response('OK', 200);
+    }
 
     // Process webhook events...
 
