@@ -108,35 +108,87 @@ class RealtimeClientTest extends TestCase
         );
     }
 
-    public function testVerifyWebhookDelegates(): void
+    private const WEBHOOK_SECRET = 'whsec_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+
+    private const WEBHOOK_BODY = '{"id":"cbb368a1-bc93-42bc-b939-51c7352cbd03","event":"member_added",'
+        . '"app_id":"test-app-id","channel":"presence-room","user_id":"42","time_ms":1760000000000}';
+
+    private function signedWebhookHeaders(string $secret, int $timestamp): array
     {
-        $timestamp = (string)time();
-        $body = '{"event":"test"}';
-        $signature = hash_hmac('sha256', "{$timestamp}.{$body}", 'my-secret-key');
+        $signature = hash_hmac('sha256', "{$timestamp}." . self::WEBHOOK_BODY, $secret);
 
-        $headers = [
+        return [
             'X-Realtime-Signature' => 'sha256=' . $signature,
-            'X-Realtime-Timestamp' => $timestamp,
+            'X-Realtime-Timestamp' => (string)$timestamp,
         ];
+    }
 
-        $result = $this->client->verifyWebhook($headers, $body);
+    public function testVerifyWebhookUsesWebhookSecret(): void
+    {
+        $headers = $this->signedWebhookHeaders(self::WEBHOOK_SECRET, time());
+
+        $result = $this->client->verifyWebhook(self::WEBHOOK_SECRET, $headers, self::WEBHOOK_BODY, maxAge: 300);
 
         $this->assertTrue($result);
     }
 
+    public function testVerifyWebhookDoesNotUseApiSecret(): void
+    {
+        // Signed with the client's API secret: must not verify against the webhook secret
+        $headers = $this->signedWebhookHeaders('my-secret-key', time());
+
+        $this->assertFalse($this->client->verifyWebhook(self::WEBHOOK_SECRET, $headers, self::WEBHOOK_BODY));
+    }
+
     public function testVerifyWebhookWithInvalidSignature(): void
     {
-        $timestamp = (string)time();
-        $body = '{"event":"test"}';
-
         $headers = [
             'X-Realtime-Signature' => 'sha256=invalid',
-            'X-Realtime-Timestamp' => $timestamp,
+            'X-Realtime-Timestamp' => (string)time(),
         ];
 
-        $result = $this->client->verifyWebhook($headers, $body);
+        $result = $this->client->verifyWebhook(self::WEBHOOK_SECRET, $headers, self::WEBHOOK_BODY);
 
         $this->assertFalse($result);
+    }
+
+    public function testVerifyWebhookAcceptsLaravelHeaderArrays(): void
+    {
+        $headers = array_map(
+            fn (string $value): array => [$value],
+            array_change_key_case($this->signedWebhookHeaders(self::WEBHOOK_SECRET, time()), CASE_LOWER),
+        );
+
+        $this->assertTrue($this->client->verifyWebhook(self::WEBHOOK_SECRET, $headers, self::WEBHOOK_BODY, maxAge: 300));
+    }
+
+    public function testVerifyWebhookRejectsFutureTimestamp(): void
+    {
+        $headers = $this->signedWebhookHeaders(self::WEBHOOK_SECRET, time() + 600);
+
+        $this->expectException(ValidationException::class);
+
+        $this->client->verifyWebhook(self::WEBHOOK_SECRET, $headers, self::WEBHOOK_BODY, maxAge: 300);
+    }
+
+    public function testVerifyWebhookRequiresWebhookSecret(): void
+    {
+        $headers = $this->signedWebhookHeaders('', time());
+
+        $this->expectException(ValidationException::class);
+        $this->expectExceptionMessage('webhook signing secret');
+
+        $this->client->verifyWebhook('', $headers, self::WEBHOOK_BODY);
+    }
+
+    public function testVerifyWebhookOldArgumentOrderIsATypeError(): void
+    {
+        $headers = $this->signedWebhookHeaders(self::WEBHOOK_SECRET, time());
+
+        $this->expectException(\TypeError::class);
+
+        // @phpstan-ignore-next-line - old signature: verifyWebhook($headers, $body, maxAge: 300)
+        $this->client->verifyWebhook($headers, self::WEBHOOK_BODY, maxAge: 300);
     }
 
     public function testClientInstantiation(): void

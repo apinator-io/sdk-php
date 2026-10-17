@@ -68,17 +68,36 @@ Get information about a specific channel.
 
 **Returns:** Channel information array. **Throws:** `ApiException` on failure.
 
-#### `verifyWebhook(array $headers, string $body, ?int $maxAge): bool`
+#### `verifyWebhook(string $webhookSecret, array $headers, string $body, ?int $maxAge = null): bool`
 
-Verify a webhook signature.
+Verify a webhook signature. Webhooks are signed with the webhook endpoint's own
+signing secret (`whsec_...`, shown in the console per endpoint), not the app's API
+secret.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `$headers` | `array` | Yes | HTTP headers (case-insensitive keys) |
-| `$body` | `string` | Yes | Raw request body |
-| `$maxAge` | `int\|null` | No | Maximum age in seconds |
+| `$webhookSecret` | `string` | Yes | The webhook endpoint's signing secret (`whsec_...`) |
+| `$headers` | `array` | Yes | HTTP headers (case-insensitive keys; string or array values, e.g. `$request->headers->all()`) |
+| `$body` | `string` | Yes | Raw request body, exactly as received |
+| `$maxAge` | `int\|null` | No | Maximum age in seconds (300 recommended). Also rejects timestamps more than 300 seconds in the future |
 
-**Returns:** `true` if valid. **Throws:** `ValidationException` if invalid or expired.
+**Returns:** `true` if the signature is valid, **`false` if it does not match** —
+always check the return value. **Throws:** `ValidationException` if
+`$webhookSecret` is empty, a signature/timestamp header is missing, or the
+timestamp is outside the allowed window.
+
+The signature header is
+`X-Realtime-Signature: sha256=hex(hmac_sha256($webhookSecret, "{timestamp}.{raw_body}"))`,
+with the timestamp from `X-Realtime-Timestamp`. Deliveries also carry
+`X-Realtime-Event` and `X-Realtime-Delivery-ID`. Payload:
+
+```json
+{"id":"<event uuid>","event":"member_added","app_id":"...","channel":"presence-room","user_id":"42","time_ms":1760000000000}
+```
+
+`event` is one of `channel_occupied`, `channel_vacated`, `member_added`,
+`member_removed` (`user_id` only on the member events); the console's test sends
+`webhook.test`. Deliveries are at-least-once, so dedupe on `id`.
 
 ---
 
@@ -104,9 +123,13 @@ Full channel authentication. Returns `['auth' => 'key:sig']` with optional `chan
 
 Static helper for webhook signature operations.
 
-#### `Webhook::verify(string $secret, array $headers, string $body, ?int $maxAge): bool`
+#### `Webhook::verify(string $secret, array $headers, string $body, ?int $maxAge = null): bool`
 
-Verify a webhook signature using constant-time comparison.
+Verify a webhook signature using constant-time comparison. `$secret` is the
+webhook endpoint's signing secret (`whsec_...`). Same return/throw behaviour as
+`Apinator::verifyWebhook()`: `false` on a signature mismatch,
+`ValidationException` on a missing header or a timestamp older than `$maxAge` or
+more than 300 seconds (`Webhook::MAX_FUTURE_SKEW_SECONDS`) in the future.
 
 #### `Webhook::sign(string $secret, string $timestamp, string $payload): string`
 

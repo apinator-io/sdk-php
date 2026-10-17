@@ -219,9 +219,9 @@ class WebhookTest extends TestCase
         $this->assertTrue($result);
     }
 
-    public function testVerifyFutureTimestampPassesWithMaxAge(): void
+    public function testVerifyFutureTimestampWithinSkewPassesWithMaxAge(): void
     {
-        // Future timestamp produces negative age, which is always < maxAge
+        // Up to 300 seconds in the future is accepted (clock skew)
         $timestamp = (string)(time() + 60);
         $body = '{"event":"test"}';
 
@@ -235,6 +235,90 @@ class WebhookTest extends TestCase
         $result = Webhook::verify(self::SECRET, $headers, $body, maxAge: 300);
 
         $this->assertTrue($result);
+    }
+
+    public function testVerifyFarFutureTimestampThrowsWithMaxAge(): void
+    {
+        $timestamp = (string)(time() + 600);
+        $body = '{"event":"test"}';
+
+        $headers = [
+            'X-Realtime-Signature' => 'sha256=' . Webhook::sign(self::SECRET, $timestamp, $body),
+            'X-Realtime-Timestamp' => $timestamp,
+        ];
+
+        $this->expectException(ValidationException::class);
+        $this->expectExceptionMessage('Webhook timestamp too far in the future');
+
+        Webhook::verify(self::SECRET, $headers, $body, maxAge: 300);
+    }
+
+    public function testVerifyFarFutureTimestampThrowsEvenWithLargeMaxAge(): void
+    {
+        $timestamp = (string)(time() + 600);
+        $body = '{"event":"test"}';
+
+        $headers = [
+            'X-Realtime-Signature' => 'sha256=' . Webhook::sign(self::SECRET, $timestamp, $body),
+            'X-Realtime-Timestamp' => $timestamp,
+        ];
+
+        $this->expectException(ValidationException::class);
+
+        Webhook::verify(self::SECRET, $headers, $body, maxAge: 3600);
+    }
+
+    public function testVerifyFarFutureTimestampPassesWithoutMaxAge(): void
+    {
+        $timestamp = (string)(time() + 600);
+        $body = '{"event":"test"}';
+
+        $headers = [
+            'X-Realtime-Signature' => 'sha256=' . Webhook::sign(self::SECRET, $timestamp, $body),
+            'X-Realtime-Timestamp' => $timestamp,
+        ];
+
+        $this->assertTrue(Webhook::verify(self::SECRET, $headers, $body));
+    }
+
+    public function testVerifyArrayHeaderValues(): void
+    {
+        // Laravel/Symfony $request->headers->all() shape: lowercase keys, array values
+        $timestamp = (string)time();
+        $body = '{"event":"test"}';
+
+        $headers = [
+            'x-realtime-signature' => ['sha256=' . Webhook::sign(self::SECRET, $timestamp, $body)],
+            'x-realtime-timestamp' => [$timestamp],
+            'content-type' => ['application/json'],
+        ];
+
+        $this->assertTrue(Webhook::verify(self::SECRET, $headers, $body, maxAge: 300));
+    }
+
+    public function testVerifyArrayHeaderValuesWithBadSignatureReturnsFalse(): void
+    {
+        $timestamp = (string)time();
+
+        $headers = [
+            'x-realtime-signature' => ['sha256=' . str_repeat('0', 64)],
+            'x-realtime-timestamp' => [$timestamp],
+        ];
+
+        $this->assertFalse(Webhook::verify(self::SECRET, $headers, '{"event":"test"}', maxAge: 300));
+    }
+
+    public function testVerifyEmptyArrayHeaderIsMissing(): void
+    {
+        $headers = [
+            'x-realtime-signature' => [],
+            'x-realtime-timestamp' => ['1700000000'],
+        ];
+
+        $this->expectException(ValidationException::class);
+        $this->expectExceptionMessage('Missing x-realtime-signature header');
+
+        Webhook::verify(self::SECRET, $headers, '{"event":"test"}');
     }
 
     public function testSignEmptyPayload(): void

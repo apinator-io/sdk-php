@@ -93,28 +93,55 @@ $auth = $client->authenticateChannel($socketId, $channelName, $channelData);
 
 ## Webhook Verification
 
+Each webhook endpoint you create in the console has its own signing secret
+(`whsec_...`). Verify deliveries with that secret, not the app's API secret, and
+pass the raw request body exactly as received.
+
+`verifyWebhook()` **returns `false` on a signature mismatch** and throws
+`ValidationException` for a missing header or a timestamp outside the window, so
+handle both:
+
 ```php
 use Apinator\Apinator;
+use Apinator\Errors\ValidationException;
 
 $client = new Apinator(
     appId: 'your-app-id',
     key: 'your-app-key',
-    secret: 'your-webhook-secret',
+    secret: 'your-app-secret',
     cluster: 'eu', // or 'us'
 );
+$webhookSecret = getenv('APINATOR_WEBHOOK_SECRET'); // whsec_...
 
 $headers = getallheaders();
 $body = file_get_contents('php://input');
 
 try {
-    $client->verifyWebhook($headers, $body, maxAge: 300);
-    // Webhook is valid — process the payload
-    $payload = json_decode($body, true);
-} catch (\Apinator\Errors\ValidationException $e) {
-    http_response_code(401);
-    echo 'Invalid webhook';
+    $valid = $client->verifyWebhook($webhookSecret, $headers, $body, maxAge: 300);
+} catch (ValidationException $e) {
+    $valid = false;
 }
+
+if (!$valid) {
+    http_response_code(401);
+    exit('Invalid webhook');
+}
+
+$payload = json_decode($body, true);
+// ['id' => '<event uuid>', 'event' => 'member_added', 'app_id' => '...',
+//  'channel' => 'presence-room', 'user_id' => '42', 'time_ms' => 1760000000000]
+// user_id is only present on member_added / member_removed.
+
+// Deliveries are at-least-once: skip $payload['id'] if already processed.
 ```
+
+Each delivery carries `X-Realtime-Signature` (`sha256=<hex>`),
+`X-Realtime-Timestamp` (unix seconds), `X-Realtime-Event` and
+`X-Realtime-Delivery-ID`. Events: `channel_occupied`, `channel_vacated`,
+`member_added`, `member_removed`; the console's test button sends `webhook.test`.
+With `maxAge` set, timestamps older than `maxAge` seconds or more than 300 seconds
+in the future are rejected. Header values may be strings or arrays (as from
+Laravel's `$request->headers->all()`).
 
 ## Channel Introspection
 

@@ -107,15 +107,33 @@ class Apinator
     /**
      * Verify a webhook signature.
      *
-     * @param array $headers HTTP headers
-     * @param string $body Raw request body
-     * @param int|null $maxAge Maximum age in seconds (optional)
-     * @return bool True if signature is valid
-     * @throws ValidationException If signature is invalid or timestamp is expired
+     * Webhooks are signed with the webhook endpoint's own signing secret
+     * (`whsec_...`, shown in the console per endpoint), not with the app's API
+     * secret, so it must be passed explicitly.
+     *
+     * Missing headers and stale timestamps throw; a signature mismatch returns
+     * false, so always check the return value.
+     *
+     * @param string $webhookSecret The webhook endpoint's signing secret (`whsec_...`)
+     * @param array<string, string|string[]> $headers HTTP headers (string or array values,
+     *                                                e.g. `$request->headers->all()`)
+     * @param string $body Raw request body, exactly as received
+     * @param int|null $maxAge Maximum age in seconds (300 recommended). When set,
+     *                         timestamps older than $maxAge or more than 300 seconds
+     *                         in the future are rejected.
+     * @return bool True if the signature is valid, false if it does not match
+     * @throws ValidationException If the webhook secret is empty, a header is missing,
+     *                             or the timestamp is outside the allowed window
      */
-    public function verifyWebhook(array $headers, string $body, ?int $maxAge = null): bool
+    public function verifyWebhook(string $webhookSecret, array $headers, string $body, ?int $maxAge = null): bool
     {
-        return Webhook::verify($this->secret, $headers, $body, $maxAge);
+        if ($webhookSecret === '') {
+            throw new ValidationException(
+                'verifyWebhook requires the webhook signing secret (whsec_...) as its first argument'
+            );
+        }
+
+        return Webhook::verify($webhookSecret, $headers, $body, $maxAge);
     }
 
     /**

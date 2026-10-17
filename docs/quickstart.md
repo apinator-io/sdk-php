@@ -46,13 +46,29 @@ echo json_encode($auth);
 
 ## 5. Verify Webhooks
 
+Use the webhook endpoint's signing secret (`whsec_...`, shown in the console per
+endpoint), not the app's API secret. `verifyWebhook()` returns `false` on a bad
+signature and throws `ValidationException` on a missing header or stale
+timestamp:
+
 ```php
 $headers = getallheaders();
 $body = file_get_contents('php://input');
 
-$client->verifyWebhook($headers, $body, maxAge: 300);
+try {
+    $valid = $client->verifyWebhook(getenv('APINATOR_WEBHOOK_SECRET'), $headers, $body, maxAge: 300);
+} catch (\Apinator\Errors\ValidationException $e) {
+    $valid = false;
+}
+
+if (!$valid) {
+    http_response_code(401);
+    exit;
+}
+
 $payload = json_decode($body, true);
-// Process the webhook payload...
+// ['id' => '...', 'event' => 'member_added', 'channel' => 'presence-room', 'user_id' => '42', ...]
+// Deliveries are at-least-once: skip $payload['id'] if already processed.
 ```
 
 ## Next Steps
